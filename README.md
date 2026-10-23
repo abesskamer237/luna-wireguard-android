@@ -21,6 +21,10 @@ Le projet utilise uniquement WireGuard standard sur UDP; il n'inclut pas Xray/VL
 
 Le serveur d'API se trouve dans [luna-wireguard-server](https://github.com/abesskamer237/luna-wireguard-server). Le parcours client d'achat et de création de compte reste à compléter; la demande de configuration nécessite actuellement un code d'activation délivré pour un abonnement actif.
 
+## Liens d’activation LUNA
+
+L’application accepte les liens `luna://enroll?api=...&token=...`. Le lien transporte uniquement une URL d’API HTTPS et un code d’enrôlement aléatoire à usage unique (43 caractères), pas une configuration VPN ni une clé privée. Il préremplit les champs mais ne déclenche aucune requête automatiquement. L’utilisateur doit vérifier le domaine HTTPS puis appuyer sur « Obtenir une configuration ». Les codes expirés ou déjà utilisés sont rejetés par l’API. N’inclus jamais la clé privée WireGuard ou le jeton administrateur dans une URI.
+
 ## Sécurité
 
 Un profil WireGuard contient une clé privée. Ne le publie pas. Ne place jamais le jeton administratif de l'API ou les identifiants Monetbil dans l'application Android.
