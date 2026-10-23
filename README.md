@@ -13,7 +13,7 @@ Application Android LUNA utilisant Kotlin, Jetpack Compose et exclusivement le m
 
 ## Compilation
 
-La CI utilise JDK 17 et Gradle 8.9. Le workflow est dans `.github/workflows/android-build.yml`. À chaque push sur `main`, il lance `gradle assembleDebug` et publie `luna-wireguard-debug-apk` dans l'onglet Actions.
+La CI utilise JDK 17 et Gradle 8.9. Le workflow est dans `.github/workflows/android-build.yml`. À chaque push sur `main`, il lance `gradle testDebugUnitTest assembleDebug` (tests unitaires puis APK debug) et publie `luna-wireguard-debug-apk` dans l'onglet Actions.
 
 Le projet utilise uniquement WireGuard standard sur UDP; il n'inclut pas Xray/VLESS/WSS/camouflage/SlowDNS.
 
