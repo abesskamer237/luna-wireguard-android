@@ -42,6 +42,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Official WireGuard Android userspace engine (wireguard-go).
     implementation("com.wireguard.android:tunnel:1.0.20260102")
