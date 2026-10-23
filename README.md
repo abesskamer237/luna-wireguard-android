@@ -18,7 +18,7 @@ Application Android LUNA utilisant Kotlin, Jetpack Compose et exclusivement le m
 
 La CI utilise JDK 17 et Gradle 8.9. Le workflow est dans `.github/workflows/android-build.yml`. À chaque push sur `main`, il lance `gradle testDebugUnitTest assembleDebug` (tests unitaires puis APK debug) et publie `luna-wireguard-debug-apk` dans l'onglet Actions.
 
-Le moteur de connexion actuel utilise WireGuard standard sur UDP. Les entrées WSS, Camouflage et SlowDNS sont visibles dans l’interface mais restent bloquées : le transport natif client et le relais serveur ne sont pas encore implémentés ni validés de bout en bout. Les noms affichés ne signifient pas que ces modes sont opérationnels ou compatibles avec le protocole propriétaire de Geny.
+Le moteur WireGuard reste standard. Le mode WSS utilise un relais UDP-local vers WebSocket TLS authentifié, et le mode Camouflage ajoute un cadrage LUNA indépendant avec padding variable. Ils ne sont proposés pour un profil que si le serveur renvoie les deux URL et le jeton de transport par appareil. Ces deux modes restent expérimentaux tant qu’un test réel Android-vers-VPS (handshake, trafic bidirectionnel, reconnexion et révocation) n’a pas été validé. SlowDNS reste indisponible. Aucun de ces modes n’est compatible avec le protocole propriétaire de Geny.
 
 ## API
 
