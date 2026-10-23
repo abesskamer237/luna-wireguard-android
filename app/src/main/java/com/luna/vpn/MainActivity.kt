@@ -1,5 +1,6 @@
 package com.luna.vpn
 
+import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -38,6 +39,8 @@ class MainActivity : ComponentActivity() {
     private var statusText by mutableStateOf("Prêt — aucun tunnel actif")
     private var subscriptionText by mutableStateOf("Aucun abonnement chargé")
     private var tunnelUp by mutableStateOf(WireGuardController.isUp())
+    private var apiUrlText by mutableStateOf(BuildConfig.DEFAULT_API_BASE_URL)
+    private var enrollmentTokenText by mutableStateOf("")
 
     
 
@@ -83,33 +86,33 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         tunnelUp = WireGuardController.isUp()
+        handleEnrollmentIntent(intent)
         setContent {
             MaterialTheme {
-                var apiUrl by androidx.compose.runtime.remember { mutableStateOf(BuildConfig.DEFAULT_API_BASE_URL) }
-                var enrollmentToken by androidx.compose.runtime.remember { mutableStateOf("") }
                 Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("LUNA", style = MaterialTheme.typography.headlineSmall)
                     Text("WireGuard standard — moteur userspace officiel")
+                    Text("Les liens luna:// ne contiennent qu’un code à usage unique, pas la clé privée WireGuard.")
                     Text("État : $statusText")
                     Text("Abonnement : $subscriptionText")
 
                     OutlinedTextField(
-                        value = apiUrl,
-                        onValueChange = { apiUrl = it },
-                        label = { Text("URL de base de l'API HTTPS") },
+                        value = apiUrlText,
+                        onValueChange = { apiUrlText = it },
+                        label = { Text("URL de base de l'API HTTPS — vérifie le domaine") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
-                        value = enrollmentToken,
-                        onValueChange = { enrollmentToken = it },
+                        value = enrollmentTokenText,
+                        onValueChange = { enrollmentTokenText = it },
                         label = { Text("Code d'activation à usage unique") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Button(
-                        onClick = { requestProfileFromApi(apiUrl, enrollmentToken) },
+                        onClick = { requestProfileFromApi(apiUrlText, enrollmentTokenText) },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Obtenir une configuration") }
 
@@ -156,6 +159,25 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleEnrollmentIntent(intent)
+    }
+
+    private fun handleEnrollmentIntent(source: Intent?) {
+        if (source?.action != Intent.ACTION_VIEW) return
+        val rawLink = source.dataString ?: return
+        val link = EnrollmentLinkParser.parse(rawLink)
+        if (link == null) {
+            statusText = "Lien LUNA invalide ou au format incorrect"
+            return
+        }
+        apiUrlText = link.apiBaseUrl
+        enrollmentTokenText = link.token
+        statusText = "Lien chargé. Vérifie le domaine HTTPS affiché avant d’envoyer le code."
     }
 
     private fun requestProfileFromApi(apiBase: String, enrollmentToken: String) {
