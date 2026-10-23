@@ -30,6 +30,11 @@ data class WssTransportConfig(
     val camouflage: Boolean = false
 )
 
+data class PeerTransportOptions(
+    val wss: WssTransportConfig,
+    val camouflage: WssTransportConfig
+)
+
 /**
  * Local UDP-to-WSS bridge.
  *
@@ -53,6 +58,7 @@ class WssUdpRelay(context: Context, private val config: WssTransportConfig) : Au
     @Volatile private var webSocket: WebSocket? = null
     @Volatile private var lastClient: SocketAddress? = null
     @Volatile private var openFailure: String? = null
+    @Volatile private var socketOpen = false
 
     val localPort: Int get() = udp.localPort
 
@@ -73,6 +79,7 @@ class WssUdpRelay(context: Context, private val config: WssTransportConfig) : Au
             .build()
         webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                socketOpen = true
                 opened.countDown()
             }
 
@@ -90,11 +97,13 @@ class WssUdpRelay(context: Context, private val config: WssTransportConfig) : Au
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 openFailure = t.message ?: "WSS connection failed"
+                socketOpen = false
                 opened.countDown()
                 running.set(false)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                socketOpen = false
                 running.set(false)
             }
         })
@@ -103,11 +112,12 @@ class WssUdpRelay(context: Context, private val config: WssTransportConfig) : Au
             close()
             throw IOException("WSS connection timed out")
         }
-        if (!openFailure.isNullOrBlank() || !running.compareAndSet(false, true)) {
+        if (!socketOpen || !openFailure.isNullOrBlank()) {
             val reason = openFailure ?: "WSS did not open"
             close()
             throw IOException(reason)
         }
+        running.set(true)
         thread(name = "LUNA-WSS-UDP", isDaemon = true) { relayUdpPackets() }
     }
 
