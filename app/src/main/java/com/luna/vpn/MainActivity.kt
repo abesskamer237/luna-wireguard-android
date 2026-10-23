@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
     private var tunnelUp by mutableStateOf(WireGuardController.isUp())
     private var apiUrlText by mutableStateOf(BuildConfig.DEFAULT_API_BASE_URL)
     private var enrollmentTokenText by mutableStateOf("")
+    private var selectedTransport by mutableStateOf(LunaTransport.WIREGUARD_UDP)
 
     
 
@@ -88,76 +89,46 @@ class MainActivity : ComponentActivity() {
         tunnelUp = WireGuardController.isUp()
         handleEnrollmentIntent(intent)
         setContent {
-            MaterialTheme {
-                Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("LUNA", style = MaterialTheme.typography.headlineSmall)
-                    Text("WireGuard standard — moteur userspace officiel")
-                    Text("Les liens luna:// ne contiennent qu’un code à usage unique, pas la clé privée WireGuard.")
-                    Text("État : $statusText")
-                    Text("Abonnement : $subscriptionText")
-
-                    OutlinedTextField(
-                        value = apiUrlText,
-                        onValueChange = { apiUrlText = it },
-                        label = { Text("URL de base de l'API HTTPS — vérifie le domaine") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = enrollmentTokenText,
-                        onValueChange = { enrollmentTokenText = it },
-                        label = { Text("Code d'activation à usage unique") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Button(
-                        onClick = { requestProfileFromApi(apiUrlText, enrollmentTokenText) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Obtenir une configuration") }
-
-                    OutlinedButton(
-                        onClick = { importProfile.launch(arrayOf("text/*", "application/octet-stream")) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Importer un profil .conf") }
-
-                    OutlinedButton(
-                        onClick = {
-                            if (importedText.isNotBlank()) exportProfile.launch("luna-wireguard.conf")
-                            else statusText = "Importe d'abord un profil WireGuard"
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Exporter le profil") }
-
-                    OutlinedTextField(
-                        value = importedText,
-                        onValueChange = { importedText = it },
-                        label = { Text("Profil WireGuard secret — ne pas partager") },
-                        modifier = Modifier.fillMaxWidth().height(240.dp)
-                    )
-
-                    Button(
-                        onClick = {
-                            val permissionIntent = VpnService.prepare(this@MainActivity)
-                            if (permissionIntent != null) vpnPermission.launch(permissionIntent)
-                            else connectTunnel()
-                        },
-                        enabled = !tunnelUp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Se connecter") }
-
-                    OutlinedButton(
-                        onClick = { disconnectTunnel() },
-                        enabled = tunnelUp,
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Se déconnecter") }
-
-                    Text(
-                        "Utilise un code d'activation à usage unique créé par l'administrateur. " +
-                            "Le profil contient une clé privée : ne le partage pas."
-                    )
+            LunaAppShell(
+                statusText = statusText,
+                subscriptionText = subscriptionText,
+                tunnelUp = tunnelUp,
+                apiUrlText = apiUrlText,
+                enrollmentTokenText = enrollmentTokenText,
+                importedText = importedText,
+                selectedTransport = selectedTransport,
+                onApiUrlChange = { apiUrlText = it },
+                onTokenChange = { enrollmentTokenText = it },
+                onTransportSelected = { mode ->
+                    selectedTransport = mode
+                    statusText = if (mode.available) {
+                        "WireGuard UDP sélectionné."
+                    } else {
+                        "${mode.title} n’est pas activé : moteur client et relais serveur requis."
+                    }
+                },
+                onConnect = {
+                    if (!selectedTransport.available) {
+                        statusText = "${selectedTransport.title} indisponible. Le tunnel n’a pas été démarré."
+                    } else {
+                        val permissionIntent = VpnService.prepare(this@MainActivity)
+                        if (permissionIntent != null) vpnPermission.launch(permissionIntent)
+                        else connectTunnel()
+                    }
+                },
+                onDisconnect = { disconnectTunnel() },
+                onImport = { importProfile.launch(arrayOf("text/*", "application/octet-stream")) },
+                onExport = {
+                    if (importedText.isNotBlank()) exportProfile.launch("luna-wireguard.conf")
+                    else statusText = "Aucun profil à exporter."
+                },
+                onRequestProfile = { requestProfileFromApi(apiUrlText, enrollmentTokenText) },
+                onClearProfile = {
+                    importedText = ""
+                    subscriptionText = "Aucun abonnement chargé"
+                    statusText = "Profil effacé de l’écran."
                 }
-            }
+            )
         }
     }
 
@@ -242,6 +213,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun connectTunnel() {
+        if (!selectedTransport.available) {
+            statusText = "${selectedTransport.title} indisponible. Le tunnel n’a pas été démarré."
+            return
+        }
         val profile = importedText
         if (profile.isBlank()) {
             statusText = "Importe d'abord un profil WireGuard .conf"
