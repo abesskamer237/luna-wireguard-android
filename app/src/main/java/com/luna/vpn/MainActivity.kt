@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private var apiUrlText by mutableStateOf(BuildConfig.DEFAULT_API_BASE_URL)
     private var enrollmentTokenText by mutableStateOf("")
     private var selectedTransport by mutableStateOf(LunaTransport.WIREGUARD_UDP)
+    private var peerTransportOptions by mutableStateOf<PeerTransportOptions?>(null)
 
     
 
@@ -61,6 +62,7 @@ class MainActivity : ComponentActivity() {
                     ?: error("Impossible de lire le fichier")
             }.onSuccess { text ->
                 importedText = text
+                peerTransportOptions = null
                 statusText = runCatching {
                     Config.parse(StringReader(text).buffered())
                     "Profil WireGuard reconnu — prêt à se connecter"
@@ -97,19 +99,21 @@ class MainActivity : ComponentActivity() {
                 enrollmentTokenText = enrollmentTokenText,
                 importedText = importedText,
                 selectedTransport = selectedTransport,
+                wssConfigured = peerTransportOptions != null,
                 onApiUrlChange = { apiUrlText = it },
                 onTokenChange = { enrollmentTokenText = it },
                 onTransportSelected = { mode ->
                     selectedTransport = mode
-                    statusText = if (mode.available) {
-                        "WireGuard UDP sélectionné."
-                    } else {
-                        "${mode.title} n’est pas activé : moteur client et relais serveur requis."
+                    statusText = when {
+                        mode == LunaTransport.WIREGUARD_UDP -> "WireGuard UDP sélectionné."
+                        isTransportConfigured(mode) -> "${mode.title} sélectionné. Le relais sera vérifié au démarrage."
+                        mode == LunaTransport.SLOWDNS -> "SlowDNS n’est pas disponible : résolveur et client DNS manquants."
+                        else -> "Récupère un profil depuis un serveur LUNA configuré pour WSS."
                     }
                 },
                 onConnect = {
-                    if (!selectedTransport.available) {
-                        statusText = "${selectedTransport.title} indisponible. Le tunnel n’a pas été démarré."
+                    if (!isTransportConfigured(selectedTransport)) {
+                        statusText = "${selectedTransport.title} n’est pas configuré. Le tunnel n’a pas été démarré."
                     } else {
                         val permissionIntent = VpnService.prepare(this@MainActivity)
                         if (permissionIntent != null) vpnPermission.launch(permissionIntent)
@@ -125,6 +129,7 @@ class MainActivity : ComponentActivity() {
                 onRequestProfile = { requestProfileFromApi(apiUrlText, enrollmentTokenText) },
                 onClearProfile = {
                     importedText = ""
+                    peerTransportOptions = null
                     subscriptionText = "Aucun abonnement chargé"
                     statusText = "Profil effacé de l’écran."
                 }
@@ -162,6 +167,7 @@ class MainActivity : ComponentActivity() {
             statusText = "Entre un code d'activation à usage unique"
             return
         }
+        peerTransportOptions = null
         statusText = "Demande de configuration sécurisée…"
         lifecycleScope.launch(Dispatchers.IO) {
             var connection: HttpURLConnection? = null
@@ -193,14 +199,35 @@ class MainActivity : ComponentActivity() {
                 val plan = subscription?.optString("plan").orEmpty()
                 val expiry = subscription?.optString("expiresAt").orEmpty()
                 val maxDevices = subscription?.optInt("maxDevices", 0) ?: 0
+                val transport = response.optJSONObject("transport")
+                val wss = transport?.optJSONObject("wss")
+                val camouflage = transport?.optJSONObject("camouflage")
+                val wssEndpoint = wss?.optString("endpoint").orEmpty()
+                val wssToken = wss?.optString("token").orEmpty()
+                val camouflageEndpoint = camouflage?.optString("endpoint").orEmpty()
+                val camouflageToken = camouflage?.optString("token").orEmpty()
+                val options = if (
+                    wssEndpoint.startsWith("wss://") && wssToken.isNotBlank() &&
+                    camouflageEndpoint.startsWith("wss://") && camouflageToken.isNotBlank()
+                ) {
+                    PeerTransportOptions(
+                        wss = WssTransportConfig(wssEndpoint, wssToken),
+                        camouflage = WssTransportConfig(camouflageEndpoint, camouflageToken, camouflage = true)
+                    )
+                } else null
                 withContext(Dispatchers.Main) {
                     importedText = config
+                    peerTransportOptions = options
                     subscriptionText = if (plan.isNotBlank() && expiry.isNotBlank()) {
                         "$plan — expire le $expiry — appareils max : $maxDevices"
                     } else {
                         "Profil importé sans métadonnées d'abonnement"
                     }
-                    statusText = "Configuration reçue et validée. Appuie sur Se connecter."
+                    statusText = if (options != null) {
+                        "Profil validé. WireGuard UDP, WSS et Camouflage fournis par le serveur."
+                    } else {
+                        "Profil validé. WireGuard UDP disponible ; WSS doit être activé côté serveur."
+                    }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -212,21 +239,34 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun isTransportConfigured(mode: LunaTransport): Boolean = when (mode) {
+        LunaTransport.WIREGUARD_UDP -> true
+        LunaTransport.WSS -> peerTransportOptions?.wss?.endpoint?.startsWith("wss://") == true
+        LunaTransport.CAMOUFLAGE -> peerTransportOptions?.camouflage?.endpoint?.startsWith("wss://") == true
+        LunaTransport.SLOWDNS -> false
+    }
+
     private fun connectTunnel() {
-        if (!selectedTransport.available) {
-            statusText = "${selectedTransport.title} indisponible. Le tunnel n’a pas été démarré."
-            return
-        }
         val profile = importedText
         if (profile.isBlank()) {
             statusText = "Importe d'abord un profil WireGuard .conf"
             return
         }
+        if (!isTransportConfigured(selectedTransport)) {
+            statusText = "${selectedTransport.title} indisponible pour ce profil."
+            return
+        }
+        val transportConfig = when (selectedTransport) {
+            LunaTransport.WIREGUARD_UDP -> null
+            LunaTransport.WSS -> peerTransportOptions?.wss
+            LunaTransport.CAMOUFLAGE -> peerTransportOptions?.camouflage
+            LunaTransport.SLOWDNS -> null
+        }
 
         statusText = "Validation du profil et démarrage du tunnel…"
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                WireGuardController.connect(applicationContext, profile)
+                WireGuardController.connect(applicationContext, profile, transportConfig)
                 withContext(Dispatchers.Main) {
                     tunnelUp = true
                     statusText = "Tunnel activé. Vérifie le handshake et le trafic réel."
@@ -239,7 +279,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
     private fun disconnectTunnel() {
         statusText = "Arrêt du tunnel…"
         lifecycleScope.launch(Dispatchers.IO) {
