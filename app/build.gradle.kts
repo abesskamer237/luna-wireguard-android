@@ -14,7 +14,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        buildConfigField("String", "DEFAULT_API_BASE_URL", "\"https://api.pagnol.xyz\"")
+        buildConfigField("String", "DEFAULT_API_BASE_URL", "\"https://apis.pagnol.xyz\"")
     }
 
     buildFeatures {

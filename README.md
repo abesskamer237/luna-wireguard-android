@@ -22,7 +22,7 @@ Le moteur WireGuard reste standard. Le mode WSS utilise un relais UDP-local vers
 
 ## API
 
-Le serveur d'API se trouve dans [luna-wireguard-server](https://github.com/abesskamer237/luna-wireguard-server). Le parcours client d'achat et de création de compte reste à compléter; la demande de configuration nécessite actuellement un code d'activation délivré pour un abonnement actif.
+URL par défaut : `https://apis.pagnol.xyz`. Le serveur d'API se trouve dans [luna-wireguard-server](https://github.com/abesskamer237/luna-wireguard-server). Le parcours client d'achat et de création de compte reste à compléter; la demande de configuration nécessite actuellement un code d'activation délivré pour un abonnement actif.
 
 ## Liens d’activation LUNA
 
