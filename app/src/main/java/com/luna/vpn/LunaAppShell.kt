@@ -82,11 +82,11 @@ private val LunaMuted = Color(0xFFAAA3B8)
 private val LunaAmber = Color(0xFFFFC857)
 private val LunaRed = Color(0xFFFF6E8A)
 
-enum class LunaTransport(val title: String, val summary: String, val available: Boolean, val icon: ImageVector) {
+enum class LunaTransport(val title: String, val summary: String, val engineSupported: Boolean, val icon: ImageVector) {
     WIREGUARD_UDP("WireGuard UDP", "Standard • stable • compatible", true, Icons.Filled.Security),
-    WSS("WSS sécurisé", "Relais WebSocket + TLS requis", false, Icons.Filled.Lock),
-    CAMOUFLAGE("Camouflage", "Transport dédié à construire", false, Icons.Filled.Language),
-    SLOWDNS("SlowDNS", "Relais DNS dédié à construire", false, Icons.Filled.Dns)
+    WSS("WSS sécurisé", "WebSocket + TLS • jeton par appareil", true, Icons.Filled.Lock),
+    CAMOUFLAGE("Camouflage", "WSS LUNA + padding variable • expérimental", true, Icons.Filled.Language),
+    SLOWDNS("SlowDNS", "Tunnel DNS distinct • non implémenté", false, Icons.Filled.Dns)
 }
 
 private enum class LunaTab(val title: String, val icon: ImageVector) {
@@ -106,6 +106,7 @@ fun LunaAppShell(
     enrollmentTokenText: String,
     importedText: String,
     selectedTransport: LunaTransport,
+    wssConfigured: Boolean,
     onApiUrlChange: (String) -> Unit,
     onTokenChange: (String) -> Unit,
     onTransportSelected: (LunaTransport) -> Unit,
@@ -175,7 +176,7 @@ fun LunaAppShell(
                             apiUrlText, enrollmentTokenText, importedText,
                             onApiUrlChange, onTokenChange, onRequestProfile, onImport, onExport, onClearProfile
                         )
-                        LunaTab.SETTINGS -> SettingsScreen(selectedTransport, onTransportSelected)
+                        LunaTab.SETTINGS -> SettingsScreen(selectedTransport, wssConfigured, onTransportSelected)
                         LunaTab.HELP -> HelpScreen(tunnelUp, statusText)
                     }
                     Spacer(Modifier.height(8.dp))
@@ -535,12 +536,13 @@ private fun ServersScreen(
 }
 
 @Composable
-private fun SettingsScreen(selected: LunaTransport, onSelect: (LunaTransport) -> Unit) {
+private fun SettingsScreen(selected: LunaTransport, wssConfigured: Boolean, onSelect: (LunaTransport) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         PageTitle("À votre façon", "Choisissez le transport. Les modes non prêts restent bloqués.")
         SectionTitle("TRANSPORT DE CONNEXION")
         LunaTransport.values().forEach { mode ->
-            TransportCard(mode, selected == mode, onClick = { onSelect(mode) })
+            val ready = mode == LunaTransport.WIREGUARD_UDP || (wssConfigured && mode.engineSupported)
+            TransportCard(mode, selected == mode, ready, onClick = { onSelect(mode) })
         }
         Card(
             colors = CardDefaults.cardColors(containerColor = LunaSurface),
@@ -551,7 +553,7 @@ private fun SettingsScreen(selected: LunaTransport, onSelect: (LunaTransport) ->
                 Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text("À propos des transports", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Text(
-                        "WSS, camouflage et SlowDNS nécessitent chacun un transport client natif et un relais serveur compatibles. Ils ne seront pas activés tant que le test bout en bout n’est pas terminé.",
+                        "WSS utilise un relais TLS authentifié. Camouflage ajoute le cadrage LUNA avec padding variable. Ces deux modes restent expérimentaux ; SlowDNS exige encore un résolveur et un tunnel DNS dédiés.",
                         color = LunaMuted, fontSize = 12.sp, lineHeight = 17.sp
                     )
                 }
@@ -565,7 +567,7 @@ private fun SettingsScreen(selected: LunaTransport, onSelect: (LunaTransport) ->
 }
 
 @Composable
-private fun TransportCard(mode: LunaTransport, isSelected: Boolean, onClick: () -> Unit) {
+private fun TransportCard(mode: LunaTransport, isSelected: Boolean, ready: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = if (isSelected) LunaPurpleDeep.copy(alpha = 0.26f) else LunaSurface),
@@ -577,7 +579,7 @@ private fun TransportCard(mode: LunaTransport, isSelected: Boolean, onClick: () 
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            RoundIcon(mode.icon, if (mode.available) LunaGreen else LunaPurple)
+            RoundIcon(mode.icon, if (ready) LunaGreen else LunaPurple)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(mode.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Text(mode.summary, color = LunaMuted, fontSize = 11.sp)
@@ -588,7 +590,7 @@ private fun TransportCard(mode: LunaTransport, isSelected: Boolean, onClick: () 
                 } else {
                     androidx.compose.material3.Icon(Icons.Filled.ArrowForwardIos, contentDescription = null, tint = LunaMuted, modifier = Modifier.size(13.dp))
                 }
-                Text(if (mode.available) "PRÊT" else "EXPÉRIMENTAL", color = if (mode.available) LunaGreen else LunaAmber, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp)
+                Text(if (ready) (if (mode == LunaTransport.WIREGUARD_UDP) "STABLE" else "CONFIGURÉ") else "INDISPONIBLE", color = if (ready) LunaGreen else LunaAmber, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp)
             }
         }
     }
